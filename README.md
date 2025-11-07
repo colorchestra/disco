@@ -13,3 +13,5 @@ yay!
 ## to do
 - [ ] arg shorthands
 - [ ] parse image URLs, download from specific registry
+- [x] manual mount option (deny cleanup if used)
+- [ ] configurable default image (env var? config file?)
