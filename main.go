@@ -23,16 +23,18 @@ func check(e error) {
 	}
 }
 
-func runContainer(image string, name string, network bool, tmpdir string) int {
+func runContainer(image string, name string, network bool, mountdir string) int {
 	var networkMode string
 	if network {
 		networkMode = "slirp4netns"
 	} else {
 		networkMode = "none"
 	}
+
 	args := []string{
 		"run",
-		"--interactive", "--tty",
+		"--interactive", 
+		"--tty",
 		"--rm",
 		"--name", name,
 		"--security-opt=label=disable",
@@ -42,7 +44,7 @@ func runContainer(image string, name string, network bool, tmpdir string) int {
 		"--cpus=1",
 		"--network", networkMode,
 		"--workdir=/work",
-		"--mount", fmt.Sprintf("type=bind,src=%s,dst=/work,rw,Z", tmpdir),
+		"--mount", fmt.Sprintf("type=bind,src=%s,dst=/work,rw,Z", mountdir),
 		fmt.Sprintf("%s:latest", image),
 	}
 
@@ -67,29 +69,45 @@ func main() {
 	imagePtr := flag.String("image", "debian", "image to use")
 	namePtr := flag.String("name", "temp", "container name")
 	networkPtr := flag.Bool("network", false, "enable network access")
-	cleanupPtr := flag.Bool("cleanup", false, "cleanup tmpdir after exit")
+	cleanupPtr := flag.Bool("cleanup", false, "cleanup tmpdir after exit; cannot be used with --mount")
+	mountPtr := flag.String("mount", "", "mount existing host directory instead of creating a tmpdir")
 
 	flag.Parse()
 
-	random_dings := makeRandomId()
-	instance_name := fmt.Sprintf("disco-%s-%s", *namePtr, random_dings)
+	// safety check: don't use --mount and --cleanup together
+	if *mountPtr != "" && *cleanupPtr {
+		fmt.Println("Error: custom mounts can not be used along with --cleanup! Exiting.")
+		os.Exit(1)
+	}
+
+	instanceID := makeRandomId()
+	instanceName := fmt.Sprintf("disco-%s-%s", *namePtr, instanceID)
 
 	if debug {
 		fmt.Println("image:", *imagePtr)
 		fmt.Println("name:", *namePtr)
 		fmt.Println("network:", *networkPtr)
-		fmt.Println("instance_name:", instance_name)
+		fmt.Println("instanceName:", instanceName)
+		fmt.Println("mount:", *mountPtr)
 	}
 
-	tmpdir_path := fmt.Sprintf("/tmp/%s", instance_name)
-	tmpdir_err := os.Mkdir(tmpdir_path, 0755)
-	check(tmpdir_err)
+	var mountHostPath string
+	// default case: create tmpdir
+	if *mountPtr == "" {
+		tmpdir_path := fmt.Sprintf("/tmp/%s", instanceName)
+		tmpdir_err := os.Mkdir(tmpdir_path, 0755)
+		check(tmpdir_err)
+		mountHostPath = tmpdir_path
+	} else {
+		mountHostPath = *mountPtr
+	}
 
-	fmt.Printf("Launching container %s - your tmpdir is %s\n", instance_name, tmpdir_path)
-	exitCode := runContainer(*imagePtr, instance_name, *networkPtr, tmpdir_path)
+	fmt.Printf("Launching container %s - your tmpdir is %s\n", instanceName, mountHostPath)
+	exitCode := runContainer(*imagePtr, instanceName, *networkPtr, mountHostPath)
 
 	if *cleanupPtr {
-		os.RemoveAll(tmpdir_path)
+		fmt.Println("Removing tmpdir", mountHostPath)
+		os.RemoveAll(mountHostPath)
 	}
 
 	os.Exit(exitCode)
