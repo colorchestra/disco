@@ -51,6 +51,24 @@ func copyFile(src, destDir string) error {
 	return err
 }
 
+func createWorkDirectory(mountArg, fileArg, instanceName string) string {
+	// create a directory if we don't want to mount an existing one
+	if mountArg == "" {
+		tmpDir, err := os.MkdirTemp("", instanceName+"-")
+		if err != nil {
+			fmt.Println("bongus")
+		}
+
+		if fileArg != "" {
+			copyFile(fileArg, tmpDir)
+		}
+		return tmpDir
+	// or just return the one we want to mount
+	} else {
+		return mountArg
+	}
+}
+
 func parseArgs() config {
 	image := flag.String("image", "debian", "image to use")
 	name := flag.String("name", "temp", "container name")
@@ -81,24 +99,10 @@ func parseArgs() config {
 	}
 
 	if cfg.Debug {
-		/*
-			fmt.Println("image:", cfg.Image)
-			fmt.Println("name:", cfg.Name)
-			fmt.Println("network:", cfg.Network)
-			fmt.Println("mount:", cfg.Mount)
-		*/
 		fmt.Printf("Config: %+v\n", cfg)
 	}
 
 	return cfg
-}
-
-//func prepareWorkDir()
-
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
 }
 
 func runContainer(image string, name string, network bool, mountdir string) int {
@@ -149,27 +153,7 @@ func main() {
 	instanceID := makeRandomId()
 	instanceName := fmt.Sprintf("disco-%s-%s", cfg.Name, instanceID)
 
-	var mountHostPath string
-	// default case: create tmpdir
-	if cfg.Mount == "" {
-		tmpdir_path := fmt.Sprintf("/tmp/%s", instanceName)
-		tmpdir_err := os.Mkdir(tmpdir_path, 0755)
-
-		tmpDir, err := os.MkdirTemp("", instanceName+"-")
-		if err != nil {
-			//return err
-			fmt.Println("bongus")
-		}
-		fmt.Println(tmpDir)
-
-		check(tmpdir_err)
-		if cfg.File != "" {
-			copyFile(cfg.File, tmpdir_path)
-		}
-		mountHostPath = tmpdir_path
-	} else {
-		mountHostPath = cfg.Mount
-	}
+	mountHostPath := createWorkDirectory(cfg.Mount, cfg.File, instanceName)
 
 	fmt.Printf("Launching container %s - your tmpdir is %s\n", instanceName, mountHostPath)
 	exitCode := runContainer(cfg.Image, instanceName, cfg.Network, mountHostPath)
