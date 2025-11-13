@@ -3,10 +3,23 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"math/rand/v2"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
+
+type config struct {
+	Image   string
+	Name    string
+	Network bool
+	Cleanup bool
+	File    string
+	Mount   string
+	Debug   bool
+}
 
 func makeRandomId() string {
 	const chars = "0123456789abcdef"
@@ -16,6 +29,71 @@ func makeRandomId() string {
 	}
 	return string(result)
 }
+
+func copyFile(src, destDir string) error {
+	// create full path for new file
+	filename := filepath.Base(src)
+	outPath := filepath.Join(destDir, filename)
+
+	fin, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer fin.Close()
+
+	fout, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer fout.Close()
+
+	_, err = io.Copy(fout, fin)
+	return err
+}
+
+func parseArgs() config {
+	image := flag.String("image", "debian", "image to use")
+	name := flag.String("name", "temp", "container name")
+	network := flag.Bool("network", false, "enable network access")
+	cleanup := flag.Bool("cleanup", false, "cleanup tmpdir after exit; cannot be used with --mount")
+	file := flag.String("file", "", "file to copy inside the tmpdir")
+	mount := flag.String("mount", "", "mount existing host directory instead of creating a tmpdir")
+	debug := flag.Bool("debug", false, "enable debug output")
+
+	flag.Parse()
+
+	cfg := config{
+		Image:   *image,
+		Name:    *name,
+		Network: *network,
+		Cleanup: *cleanup,
+		File:    *file,
+		Mount:   *mount,
+		Debug:   *debug,
+	}
+
+	// safety checks
+	if cfg.Mount != "" && cfg.Cleanup {
+		log.Fatal("Error: --mount cannot be used with --cleanup")
+	}
+	if cfg.Mount != "" && cfg.File != "" {
+		log.Fatal("Error: --mount cannot be used with --file")
+	}
+
+	if cfg.Debug {
+		/*
+			fmt.Println("image:", cfg.Image)
+			fmt.Println("name:", cfg.Name)
+			fmt.Println("network:", cfg.Network)
+			fmt.Println("mount:", cfg.Mount)
+		*/
+		fmt.Printf("Config: %+v\n", cfg)
+	}
+
+	return cfg
+}
+
+//func prepareWorkDir()
 
 func check(e error) {
 	if e != nil {
@@ -33,7 +111,7 @@ func runContainer(image string, name string, network bool, mountdir string) int 
 
 	args := []string{
 		"run",
-		"--interactive", 
+		"--interactive",
 		"--tty",
 		"--rm",
 		"--name", name,
@@ -65,47 +143,38 @@ func runContainer(image string, name string, network bool, mountdir string) int 
 }
 
 func main() {
-	debug := false
-	imagePtr := flag.String("image", "debian", "image to use")
-	namePtr := flag.String("name", "temp", "container name")
-	networkPtr := flag.Bool("network", false, "enable network access")
-	cleanupPtr := flag.Bool("cleanup", false, "cleanup tmpdir after exit; cannot be used with --mount")
-	mountPtr := flag.String("mount", "", "mount existing host directory instead of creating a tmpdir")
 
-	flag.Parse()
-
-	// safety check: don't use --mount and --cleanup together
-	if *mountPtr != "" && *cleanupPtr {
-		fmt.Println("Error: custom mounts can not be used along with --cleanup! Exiting.")
-		os.Exit(1)
-	}
+	cfg := parseArgs()
 
 	instanceID := makeRandomId()
-	instanceName := fmt.Sprintf("disco-%s-%s", *namePtr, instanceID)
-
-	if debug {
-		fmt.Println("image:", *imagePtr)
-		fmt.Println("name:", *namePtr)
-		fmt.Println("network:", *networkPtr)
-		fmt.Println("instanceName:", instanceName)
-		fmt.Println("mount:", *mountPtr)
-	}
+	instanceName := fmt.Sprintf("disco-%s-%s", cfg.Name, instanceID)
 
 	var mountHostPath string
 	// default case: create tmpdir
-	if *mountPtr == "" {
+	if cfg.Mount == "" {
 		tmpdir_path := fmt.Sprintf("/tmp/%s", instanceName)
 		tmpdir_err := os.Mkdir(tmpdir_path, 0755)
+
+		tmpDir, err := os.MkdirTemp("", instanceName+"-")
+		if err != nil {
+			//return err
+			fmt.Println("bongus")
+		}
+		fmt.Println(tmpDir)
+
 		check(tmpdir_err)
+		if cfg.File != "" {
+			copyFile(cfg.File, tmpdir_path)
+		}
 		mountHostPath = tmpdir_path
 	} else {
-		mountHostPath = *mountPtr
+		mountHostPath = cfg.Mount
 	}
 
 	fmt.Printf("Launching container %s - your tmpdir is %s\n", instanceName, mountHostPath)
-	exitCode := runContainer(*imagePtr, instanceName, *networkPtr, mountHostPath)
+	exitCode := runContainer(cfg.Image, instanceName, cfg.Network, mountHostPath)
 
-	if *cleanupPtr {
+	if cfg.Cleanup {
 		fmt.Println("Removing tmpdir", mountHostPath)
 		os.RemoveAll(mountHostPath)
 	}
