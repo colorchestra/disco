@@ -27,15 +27,15 @@ func makeRandomId() string {
 	return string(result)
 }
 
-func readConfig() (Config, error) {
+func readConfig(configFilePath string) (Config, error) {
 	defaultConfig := Config{Images: []map[string]string{ {"default": defaultImageName}}}
-	data, err := os.ReadFile("disco.yaml")
+	data, err := os.ReadFile(configFilePath)
     var cfg Config
 	if err != nil {
         // default config if no file is found
         if errors.Is(err, fs.ErrNotExist) {
             // return defaultConfig, nil
-            fmt.Println("Config file disco.yaml not found! Proceeding with defaults")
+            fmt.Printf("Config file %s not found! Proceeding with defaults\n", configFilePath)
             return defaultConfig, err
         }
         // return any other error
@@ -79,7 +79,6 @@ func runContainer(image string, name string, network bool, mountdir string) int 
 		"--workdir=/work",
 		"--mount", fmt.Sprintf("type=bind,src=%s,dst=/work,rw,Z", mountdir),
 		image,
-		//fmt.Sprintf("%s:latest", image),
 	}
 
 	cmd := exec.Command("podman", args...)
@@ -106,7 +105,7 @@ func getImageName(imageArg string, config Config) string {
 		for _, element := range config.Images {
 			for key, schmelement := range element {
 				if key == "default" {
-					fmt.Printf("Using default image from config file: %s\n", schmelement)
+					fmt.Printf("Using default image: %s\n", schmelement)
 					return schmelement
 				}
 			}
@@ -129,8 +128,6 @@ func getImageName(imageArg string, config Config) string {
 }
 
 func main() {	
-	var config, _ = readConfig()
-	//check(err)
 	
 	debug := false
 	imagePtr := flag.String("image", "", "image to use")
@@ -138,8 +135,12 @@ func main() {
 	networkPtr := flag.Bool("network", false, "enable network access")
 	cleanupPtr := flag.Bool("cleanup", false, "cleanup tmpdir after exit; cannot be used with --mount")
 	mountPtr := flag.String("mount", "", "mount existing host directory instead of creating a tmpdir")
+	configPtr := flag.String("config", "disco.yaml", "path to yaml config file")
 
 	flag.Parse()
+	
+	var config, _ = readConfig(*configPtr)
+	//check(err)
 
 	// safety check: don't use --mount and --cleanup together
 	if *mountPtr != "" && *cleanupPtr {
@@ -157,6 +158,7 @@ func main() {
 		fmt.Println("network:", *networkPtr)
 		fmt.Println("instanceName:", instanceName)
 		fmt.Println("mount:", *mountPtr)
+		fmt.Println("config:", *configPtr)
 	}
 
 	var mountHostPath string
