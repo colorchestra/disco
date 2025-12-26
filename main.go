@@ -172,7 +172,7 @@ func main() {
 		mountHostPath = *mountPtr
 	}
 
-	fmt.Printf("Launching container %s with image %s - your tmpdir is %s\n", instanceName, imageName, mountHostPath)
+	fmt.Printf("Launching with image %s - your tmpdir is %s\n", imageName, mountHostPath)
 	exitCode := runContainer(imageName, instanceName, *networkPtr, mountHostPath)
 
 	if *cleanupPtr {
