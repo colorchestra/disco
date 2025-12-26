@@ -1,0 +1,4 @@
+images:
+  - default: debian:latest
+  - debian: debian:latest
+  - fedora: fedora:latest
