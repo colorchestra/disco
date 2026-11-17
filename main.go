@@ -12,6 +12,7 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
+var useKrun = true
 var defaultImageName = "debian:latest"
 
 type Config struct {
@@ -63,12 +64,19 @@ func runContainer(image string, name string, network bool, mountdir string) int 
 	} else {
 		networkMode = "none"
 	}
+	var containerRuntime string
+	if useKrun {
+		containerRuntime = "krun"
+	} else {
+		containerRuntime = "krun"
+	}
 
 	args := []string{
 		"run",
 		"--interactive", 
 		"--tty",
 		"--rm",
+		"--runtime", containerRuntime,
 		"--name", name,
 		"--security-opt=label=disable",
 		"--user=root",

@@ -1,4 +1,4 @@
 images:
-  - default: debian:latest
+  - default: localhost/krun/base:latest
   - debian: debian:latest
   - fedora: fedora:latest
